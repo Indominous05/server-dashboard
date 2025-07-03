@@ -1,0 +1,1646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Server Monitoring Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #0f0f23, #1a1a2e);
+            color: #e0e0e0;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            background: linear-gradient(45deg, #4facfe, #00f2fe);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 10px;
+        }
+
+        .last-updated {
+            color: #888;
+            font-size: 0.9rem;
+        }
+
+        .cpu-graph-section {
+            margin-bottom: 40px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 20px;
+            padding: 25px;
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .cpu-graph-section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #4facfe, #00f2fe);
+            opacity: 0.8;
+        }
+
+        .graph-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .graph-title {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .graph-controls {
+            display: flex;
+            gap: 10px;
+        }
+
+        .time-button {
+            padding: 8px 16px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            color: #e0e0e0;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.9rem;
+        }
+
+        .time-button:hover, .time-button.active {
+            background: rgba(79, 172, 254, 0.3);
+            border-color: #4facfe;
+            color: #fff;
+        }
+
+        .chart-container {
+            height: 300px;
+            margin-bottom: 20px;
+            border-radius: 15px;
+            overflow: hidden;
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        .servers-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 15px;
+            margin-bottom: 40px;
+        }
+
+        .server-card {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 15px;
+            padding: 15px;
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .server-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #4facfe, #00f2fe);
+            opacity: 0.8;
+        }
+
+        .server-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .server-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .server-name {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #fff;
+        }
+
+        .server-ip {
+            color: #888;
+            font-size: 0.8rem;
+            font-family: 'Monaco', monospace;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .metric-item {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            padding: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .metric-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .metric-label {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 4px;
+            font-size: 0.75rem;
+        }
+
+        .metric-icon {
+            font-size: 0.9rem;
+            margin-right: 4px;
+        }
+
+        .metric-value {
+            font-weight: 600;
+            color: #fff;
+            font-size: 0.8rem;
+        }
+
+        .metric-bar {
+            height: 4px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .metric-fill {
+            height: 100%;
+            border-radius: 10px;
+            transition: all 0.8s ease;
+            position: relative;
+        }
+
+        .metric-fill::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+            animation: shimmer 2s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { left: -100%; }
+            100% { left: 100%; }
+        }
+
+        .network-info {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.7rem;
+            color: #ccc;
+            margin-top: 3px;
+        }
+
+        .processes {
+            margin-top: 12px;
+        }
+
+        .processes-title {
+            font-size: 0.9rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #fff;
+        }
+
+        .process-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 8px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 6px;
+            margin-bottom: 4px;
+            transition: all 0.3s ease;
+        }
+
+        .process-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .process-name {
+            font-weight: 500;
+            font-family: 'Monaco', monospace;
+            font-size: 0.8rem;
+        }
+
+        .status-badge {
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            transition: all 0.3s ease;
+        }
+
+        .status-running {
+            background: linear-gradient(45deg, #00c851, #00ff00);
+            color: #000;
+            box-shadow: 0 2px 8px rgba(0, 200, 81, 0.3);
+        }
+
+        .status-down {
+            background: linear-gradient(45deg, #ff4444, #ff0000);
+            color: #fff;
+            box-shadow: 0 2px 8px rgba(255, 68, 68, 0.3);
+            animation: pulse 2s infinite;
+        }
+
+        .status-warning {
+            background: linear-gradient(45deg, #ffbb33, #ff8800);
+            color: #000;
+            box-shadow: 0 2px 8px rgba(255, 187, 51, 0.3);
+        }
+
+        .status-resolved {
+            background: linear-gradient(45deg, #00c851, #00ff00);
+            color: #000;
+            box-shadow: 0 2px 8px rgba(0, 200, 81, 0.3);
+            animation: resolvedGlow 1s ease-in-out;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        @keyframes resolvedGlow {
+            0% { box-shadow: 0 2px 8px rgba(0, 200, 81, 0.3); }
+            50% { box-shadow: 0 2px 15px rgba(0, 200, 81, 0.8); }
+            100% { box-shadow: 0 2px 8px rgba(0, 200, 81, 0.3); }
+        }
+
+        .alerts-section {
+            margin-top: 40px;
+        }
+        <div class="alerts-section" id="cpuAlertsSection">
+    <div class="alerts-header">
+        <div class="alerts-title-section">
+            <h2 class="alerts-title">🔥 CPU Alerts</h2>
+        </div>
+    </div>
+    <div id="cpuAlertsContainer">
+        <div class="no-alerts">
+            No high CPU usage detected
+        </div>
+    </div>
+</div>
+
+
+        .alerts-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .alerts-title-section {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .alerts-title {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .alerts-count {
+            background: linear-gradient(45deg, #ff4444, #ff0000);
+            color: #fff;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 600;
+            animation: pulse 2s infinite;
+        }
+
+        .alerts-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .resolve-all-button {
+            background: linear-gradient(45deg, #4facfe, #00f2fe);
+            color: #fff;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 25px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(79, 172, 254, 0.3);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: none;
+        }
+
+        .resolve-all-button:hover {
+            background: linear-gradient(45deg, #00f2fe, #4facfe);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(79, 172, 254, 0.4);
+        }
+
+        .resolve-all-button:active {
+            transform: translateY(0);
+        }
+
+        .resolve-all-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .resolve-all-button.show {
+            display: block;
+        }
+
+        .alert-item {
+            background: rgba(255, 68, 68, 0.1);
+            border: 1px solid rgba(255, 68, 68, 0.3);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 15px;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.5s ease;
+        }
+
+        .alert-item::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background: linear-gradient(180deg, #ff4444, #ff0000);
+        }
+
+        .alert-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .alert-info h4 {
+            color: #ff6b6b;
+            margin-bottom: 5px;
+            font-size: 1.1rem;
+        }
+
+        .alert-info p {
+            color: #ccc;
+            margin: 0;
+        }
+
+        .alert-actions {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 10px;
+        }
+
+        .alert-time {
+            color: #888;
+            font-size: 0.9rem;
+            font-family: 'Monaco', monospace;
+        }
+
+        .resolve-button {
+            background: linear-gradient(45deg, #00c851, #00ff00);
+            color: #000;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 200, 81, 0.3);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .resolve-button:hover {
+            background: linear-gradient(45deg, #00ff00, #00c851);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 200, 81, 0.4);
+        }
+
+        .resolve-button:active {
+            transform: translateY(0);
+        }
+
+        .resolve-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .alert-item.resolving {
+            opacity: 0.5;
+            transform: scale(0.98);
+        }
+
+        .alert-item.resolved {
+            opacity: 0;
+            transform: translateX(100%);
+        }
+
+        .no-alerts {
+            text-align: center;
+            padding: 40px;
+            color: #888;
+            font-size: 1.1rem;
+        }
+
+        .no-alerts::before {
+            content: '✅';
+            display: block;
+            font-size: 3rem;
+            margin-bottom: 10px;
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 68, 68, 0.95);
+            color: white;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            z-index: 1000;
+            transform: translateX(400px);
+            transition: all 0.5s ease;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            max-width: 350px;
+        }
+
+        .notification.show {
+            transform: translateX(0);
+        }
+
+        .notification-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .notification-title {
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+
+        .notification-close {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .notification-body {
+            font-size: 0.9rem;
+            line-height: 1.4;
+        }
+
+        .success-notification {
+            background: rgba(0, 200, 81, 0.95) !important;
+        }
+
+        .info-notification {
+            background: rgba(79, 172, 254, 0.95) !important;
+        }
+
+        @media (max-width: 1200px) {
+            .servers-grid {
+                grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            }
+        }
+
+        @media (max-width: 768px) {
+            .servers-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .notification {
+                right: 10px;
+                left: 10px;
+                max-width: none;
+                transform: translateY(-100px);
+            }
+            
+            .notification.show {
+                transform: translateY(0);
+            }
+
+            .graph-controls {
+                flex-wrap: wrap;
+                gap: 5px;
+            }
+
+            .time-button {
+                font-size: 0.8rem;
+                padding: 6px 12px;
+            }
+
+            .alert-content {
+                flex-direction: column;
+                gap: 15px;
+            }
+            
+            .alert-actions {
+                flex-direction: row;
+                align-items: center;
+                justify-content: space-between;
+                width: 100%;
+            }
+            
+            .resolve-button {
+                font-size: 0.8rem;
+                padding: 6px 12px;
+            }
+
+            .alerts-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+
+            .alerts-actions {
+                width: 100%;
+                justify-content: flex-end;
+            }
+
+            .resolve-all-button {
+                font-size: 0.9rem;
+                padding: 8px 16px;
+            }
+
+            .metrics-grid {
+                grid-template-columns: 1fr;
+                gap: 6px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .servers-grid {
+                grid-template-columns: 1fr;
+                gap: 10px;
+            }
+            
+            .server-card {
+                padding: 12px;
+            }
+            
+            .metrics-grid {
+                grid-template-columns: 1fr;
+            }
+         
+        }
+.dropdown {
+    padding: 8px 12px;
+    border: 2px solid #667eea;
+    border-radius: 8px;
+    background-color: white;
+    font-size: 0.95em;
+    color: #000;
+    cursor: pointer;
+    min-width: 180px;
+    transition: all 0.3s ease;
+}
+
+.dropdown:hover {
+    border-color: #8892ff;
+}
+
+.dropdown:focus {
+    outline: none;
+    border-color: #8892ff;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+}
+
+.graph-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 15px;
+    margin-top: 10px;
+}
+
+.time-buttons {
+    display: flex;
+    gap: 10px;
+}
+
+.metric-select-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255, 255, 255, 0.05);
+    padding: 8px 12px;
+    border-radius: 12px;
+}
+
+.metric-select-group label {
+    color: #ccc;
+    font-size: 0.9rem;
+    margin: 0;
+}
+
+
+
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🖥️ Server Monitoring Dashboard</h1>
+        <div class="last-updated">Last updated: <span id="lastUpdated">--:--:--</span></div>
+    </div>
+
+    <div class="cpu-graph-section">
+        <div class="graph-header">
+            <h2 class="graph-title">📊 CPU Usage Over Time</h2>
+           <div class="graph-controls">
+    <div class="time-buttons">
+        <button class="time-button active" onclick="changeTimeRange('5m')">5m</button>
+        <button class="time-button" onclick="changeTimeRange('15m')">15m</button>
+        <button class="time-button" onclick="changeTimeRange('1h')">1h</button>
+        <button class="time-button" onclick="changeTimeRange('6h')">6h</button>
+    </div>
+
+    <div class="metric-select-group">
+        <label for="metricSelect">Metric:</label>
+        <select id="metricSelect" class="dropdown">
+            <option value="cpu">CPU Usage (%)</option>
+            <option value="memory">Memory Usage (%)</option>
+            <option value="disk">Disk Space Usage (%)</option>
+            <option value="network">Network Traffic (Mbps)</option>
+            
+        </select>
+    </div>
+</div>
+
+
+        </div>
+        <div class="chart-container">
+            <canvas id="cpuChart"></canvas>
+        </div>
+    </div>
+
+    <div class="servers-grid" id="serversGrid">
+        <!-- Server cards will be dynamically generated here -->
+    </div>
+
+    <div class="alerts-section">
+        <div class="alerts-header" style="display: flex; justify-content: space-between; align-items: center;">
+    <div style="display: flex; align-items: center; gap: 15px;">
+        <h2 class="alerts-title" style="margin: 0;">🚨 Active Alerts</h2>
+        <div class="alerts-count" id="alertsCount" style="display: none;">0</div>
+    </div>
+    <button class="resolve-all-button" id="resolveAllButton" onclick="resolveAllAlerts()">
+        ✓ Resolve All
+    </button>
+</div>
+
+        <div id="alertsContainer" style="margin-top: 20px;">
+            <div class="no-alerts">
+                All systems are running smoothly
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Enhanced simulated data with multi-metrics
+        let simulatedData = {
+            "servers": [
+                {
+                    "id": "server-1",
+                    "name": "Server A",
+                    "ip": "192.168.0.101",
+                    "metrics": {
+                        "cpu": 12,
+                        "memory": 45,
+                        "disk": 23,
+                        "network": {
+                            "in": 1.2,
+                            "out": 0.8
+                        }
+                         
+                    },
+                    "processes": [
+                        {"name": "nginx", "status": "running"},
+                        {"name": "db", "status": "running"},
+                        {"name": "app", "status": "running"}
+                    ]
+                },
+                {
+                    "id": "server-2",
+                    "name": "Server B",
+                    "ip": "192.168.0.102",
+                    "metrics": {
+                        "cpu": 43,
+                        "memory": 67,
+                        "disk": 78,
+                        "network": {
+                            "in": 2.5,
+                            "out": 1.9
+                        }
+                       
+                    },
+                    "processes": [
+                        {"name": "nginx", "status": "running"},
+                        {"name": "redis", "status": "running"},
+                        {"name": "analytics", "status": "running"}
+                    ]
+                },
+                {
+                    "id": "server-3",
+                    "name": "Server C",
+                    "ip": "192.168.0.103",
+                    "metrics": {
+                        "cpu": 32,
+                        "memory": 56,
+                        "disk": 34,
+                        "network": {
+                            "in": 0.9,
+                            "out": 1.1
+                        }
+                        
+                    },
+                    "processes": [
+                        {"name": "api", "status": "running"},
+                        {"name": "postgres", "status": "running"},
+                        {"name": "cron", "status": "running"}
+                    ]
+                },
+                {
+                    "id": "server-4",
+                    "name": "Server D",
+                    "ip": "192.168.0.104",
+                    "metrics": {
+                        "cpu": 61,
+                        "memory": 89,
+                        "disk": 45,
+                        "network": {
+                            "in": 3.2,
+                            "out": 2.1
+                        }
+                       
+                    },
+                    "processes": [
+                        {"name": "app", "status": "running"},
+                        {"name": "cache", "status": "running"},
+                        {"name": "scheduler", "status": "running"}
+                    ]
+                }
+            ],
+            "alerts": []
+        };
+
+        let shownAlerts = new Set();
+        let cpuChart;
+        let cpuHistory = {};
+        let currentTimeRange = '5m';
+        let recentlyResolved = new Set();
+let selectedMetric = 'cpu';
+
+const metricConfigs = {
+    cpu: { title: '📊 CPU Usage Over Time', color: '#ff6b6b', unit: '%' },
+    memory: { title: '🧠 Memory Usage Over Time', color: '#4ecdc4', unit: '%' },
+    disk: { title: '💾 Disk Space Usage Over Time', color: '#45b7d1', unit: '%' },
+    network: { title: '🌐 Network Traffic Over Time', color: '#96ceb4', unit: ' Mbps' },
+    
+};
+
+
+        // Initialize CPU history for each server
+        simulatedData.servers.forEach(server => {
+            cpuHistory[server.id] = [];
+        });
+
+        function getMetricColor(value) {
+            if (value <= 30) return 'linear-gradient(90deg, #00c851, #00ff00)';
+            if (value <= 70) return 'linear-gradient(90deg, #ffbb33, #ff8800)';
+            return 'linear-gradient(90deg, #ff4444, #ff0000)';
+        }
+
+        function formatNetworkSpeed(speed) {
+            if (speed >= 1000) {
+                return (speed / 1000).toFixed(1) + ' GB/s';
+            } else if (speed >= 1) {
+                return speed.toFixed(1) + ' MB/s';
+            } else {
+                return (speed * 1000).toFixed(0) + ' KB/s';
+            }
+        }
+
+        function getServerColor(index) {
+            const colors = [
+                'rgba(79, 172, 254, 1)',   // Blue
+                'rgba(0, 200, 81, 1)',     // Green
+                'rgba(255, 187, 51, 1)',   // Orange
+                'rgba(155, 89, 182, 1)',  
+                'rgba(156, 39, 176, 1)',   // Purple
+                'rgba(0, 188, 212, 1)'     // Cyan
+            ];
+            return colors[index % colors.length];
+        }
+
+        function initCpuChart() {
+            const ctx = document.getElementById('cpuChart').getContext('2d');
+            
+            cpuChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: simulatedData.servers.map((server, index) => ({
+                        label: server.name,
+                        data: [],
+                        borderColor: getServerColor(index),
+                        backgroundColor: getServerColor(index).replace('1)', '0.1)'),
+                        borderWidth: 3,
+                        fill: false,
+                        tension: 0.4,
+                        pointRadius: 4,
+                        pointHoverRadius: 6,
+                        pointBackgroundColor: getServerColor(index),
+                        pointBorderColor: '#ffffff',
+                        pointBorderWidth: 2
+                    }))
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            labels: {
+                                color: '#e0e0e0',
+                                usePointStyle: true,
+                                padding: 20,
+                                font: {
+                                    size: 12,
+                                    weight: '500'
+                                }
+                            }
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            titleColor: '#ffffff',
+                            bodyColor: '#e0e0e0',
+                            borderColor: 'rgba(255, 255, 255, 0.2)',
+                            borderWidth: 1,
+                            cornerRadius: 10,
+                            padding: 12,
+                            titleFont: {
+                                size: 14,
+                                weight: 'bold'
+                            },
+                            bodyFont: {
+                                size: 13
+                            },
+                            callbacks: {
+                                label: function(context) {
+    const unit = metricConfigs[selectedMetric]?.unit || '';
+    return context.dataset.label + ': ' + context.parsed.y + unit;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)',
+                                drawBorder: false
+                            },
+                            ticks: {
+                                color: '#888',
+                                font: {
+                                    size: 11
+                                }
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)',
+                                drawBorder: false
+                            },
+                            ticks: {
+                                color: '#888',
+                                font: {
+                                    size: 11
+                                },
+                                callback: function(value) {
+                                    return value + '%';
+                                }
+                            }
+                        }
+                    },
+                    interaction: {
+                        mode: 'nearest',
+                        axis: 'x',
+                        intersect: false
+                    },
+                    animation: {
+                        duration: 750,
+                        easing: 'easeInOutQuart'
+                    }
+                }
+            });
+            updateChartAppearance();
+
+        }
+        
+        function updateCpuChart() {
+            const now = new Date();
+            const timeLabel = now.toLocaleTimeString();
+
+            // Add current CPU data to history
+            simulatedData.servers.forEach((server, index) => {
+                if (!cpuHistory[server.id]) {
+                    cpuHistory[server.id] = [];
+                }
+                
+                const metricValue = getMetricValue(server.metrics, selectedMetric);
+
+cpuHistory[server.id].push({
+    time: now,
+    value: metricValue,
+    label: timeLabel
+
+                });
+
+                // Keep only relevant data based on time range
+                const cutoffTime = new Date(now.getTime() - getTimeRangeMs(currentTimeRange));
+                cpuHistory[server.id] = cpuHistory[server.id].filter(point => point.time >= cutoffTime);
+            });
+
+            updateChartData();
+        }
+        function getMetricValue(metrics, metric) {
+    switch(metric) {
+        case 'cpu':
+            return metrics.cpu;
+        case 'memory':
+            return metrics.memory;
+        case 'disk':
+            return metrics.disk;
+        case 'network':
+            return metrics.network.in; // You can also average in + out
+        
+
+        default:
+            return 0;
+    }
+}
+
+
+        function updateChartAppearance() {
+    const config = metricConfigs[selectedMetric];
+    document.querySelector('.graph-title').textContent = config.title;
+
+    cpuChart.data.datasets.forEach((dataset, index) => {
+    const originalColor = getServerColor(index);
+    dataset.borderColor = originalColor;
+    dataset.backgroundColor = originalColor.replace('1)', '0.1)');
+    dataset.pointBackgroundColor = originalColor;
+});
+
+
+    cpuChart.update('none');
+}
+
+
+        function getTimeRangeMs(range) {
+            switch(range) {
+                case '5m': return 5 * 60 * 1000;
+                case '15m': return 15 * 60 * 1000;
+                case '1h': return 60 * 60 * 1000;
+                case '6h': return 6 * 60 * 60 * 1000;
+                default: return 5 * 60 * 1000;
+            }
+        }
+
+      function updateChartData() {
+    const allTimes = new Set();
+    Object.values(cpuHistory).forEach(history => {
+        history.forEach(point => allTimes.add(point.label));
+    });
+
+    const sortedLabels = Array.from(allTimes).sort((a, b) => {
+        const timeA = new Date('1970/01/01 ' + a);
+        const timeB = new Date('1970/01/01 ' + b);
+        return timeA - timeB;
+    });
+
+    cpuChart.data.labels = sortedLabels;
+
+    // ✅ Clear previous datasets
+    cpuChart.data.datasets = [];
+
+    if (selectedMetric === 'load-average') {
+        const data = sortedLabels.map(label => {
+            const point = cpuHistory['load-average']?.find(p => p.label === label);
+            return point ? point.value : null;
+        });
+
+        cpuChart.data.datasets.push({
+            label: 'System Load Average',
+            data: data,
+            borderColor: '#ff9ff3',
+            backgroundColor: '#ff9ff320',
+            borderWidth: 3,
+            fill: false,
+            tension: 0.4,
+            pointRadius: 4,
+            pointHoverRadius: 6,
+            pointBackgroundColor: '#ff9ff3',
+            pointBorderColor: '#ffffff',
+            pointBorderWidth: 2
+        });
+    } else {
+        simulatedData.servers.forEach((server, index) => {
+            const serverHistory = cpuHistory[server.id] || [];
+            const data = sortedLabels.map(label => {
+                const point = serverHistory.find(p => p.label === label);
+                return point ? point.value : null;
+            });
+
+            cpuChart.data.datasets.push({
+                label: server.name,
+                data: data,
+                borderColor: getServerColor(index),
+                backgroundColor: getServerColor(index).replace('1)', '0.1)'),
+                borderWidth: 3,
+                fill: false,
+                tension: 0.4,
+                pointRadius: 4,
+                pointHoverRadius: 6,
+                pointBackgroundColor: getServerColor(index),
+                pointBorderColor: '#ffffff',
+                pointBorderWidth: 2
+            });
+        });
+    }
+
+    cpuChart.update('none');
+}
+
+
+
+        function changeTimeRange(range) {
+            currentTimeRange = range;
+            
+            // Update button states
+            document.querySelectorAll('.time-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            // Filter data and update chart
+            const now = new Date();
+            const cutoffTime = new Date(now.getTime() - getTimeRangeMs(range));
+            
+            Object.keys(cpuHistory).forEach(serverId => {
+                cpuHistory[serverId] = cpuHistory[serverId].filter(point => point.time >= cutoffTime);
+            });
+
+            updateChartData();
+        }
+
+        function updateLastUpdated() {
+            const now = new Date();
+            document.getElementById('lastUpdated').textContent = now.toLocaleTimeString();
+        }
+
+        function renderServers(data) {
+            const grid = document.getElementById('serversGrid');
+            grid.innerHTML = '';
+
+            data.servers.forEach(server => {
+                const serverCard = document.createElement('div');
+                serverCard.className = 'server-card';
+                
+                const processesHtml = server.processes.map(process => {
+                    let statusClass = 'status-running';
+                    if (process.status === 'down') {
+                        statusClass = 'status-down';
+                    } else if (process.status === 'warning') {
+                        statusClass = 'status-warning';
+                    } else if (process.status === 'running') {
+                        // Check if this process was recently resolved
+                        const processKey = `${server.name}-${process.name}`;
+                        if (recentlyResolved.has(processKey)) {
+                            statusClass = 'status-resolved';
+                            // Remove from recently resolved after animation
+                            setTimeout(() => {
+                                recentlyResolved.delete(processKey);
+                            }, 1000);
+                        } else {
+                            statusClass = 'status-running';
+                        }
+                    }
+                    
+                    return `
+                        <div class="process-item">
+                            <span class="process-name">${process.name}</span>
+                            <span class="status-badge ${statusClass}">${process.status}</span>
+                        </div>
+                    `;
+                }).join('');
+
+                serverCard.innerHTML = `
+                    <div class="server-header">
+                        <div>
+                            <div class="server-name">${server.name}</div>
+                            <div class="server-ip">${server.ip}</div>
+                        </div>
+                    </div>
+                    <div class="metrics-grid">
+                        <div class="metric-item">
+                            <div class="metric-label">
+                                <span><span class="metric-icon">🖥️</span>CPU</span>
+                                <span class="metric-value">${server.metrics.cpu}%</span>
+                            </div>
+                            <div class="metric-bar">
+                                <div class="metric-fill" style="width: ${server.metrics.cpu}%; background: ${getMetricColor(server.metrics.cpu)};"></div>
+                            </div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-label">
+                                <span><span class="metric-icon">🧠</span>Memory</span>
+                                <span class="metric-value">${server.metrics.memory}%</span>
+                            </div>
+                            <div class="metric-bar">
+                                <div class="metric-fill" style="width: ${server.metrics.memory}%; background: ${getMetricColor(server.metrics.memory)};"></div>
+                            </div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-label">
+                                <span><span class="metric-icon">💾</span>Disk</span>
+                                <span class="metric-value">${server.metrics.disk}%</span>
+                            </div>
+                            <div class="metric-bar">
+                                <div class="metric-fill" style="width: ${server.metrics.disk}%; background: ${getMetricColor(server.metrics.disk)};"></div>
+                            </div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-label">
+                                <span><span class="metric-icon">🌐</span>Network</span>
+                                <span class="metric-value">Active</span>
+                            </div>
+                            <div class="network-info">
+                                <span>↓ ${formatNetworkSpeed(server.metrics.network.in)}</span>
+                                <span>↑ ${formatNetworkSpeed(server.metrics.network.out)}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="processes">
+                        <div class="processes-title">Processes</div>
+                        ${processesHtml}
+                    </div>
+                `;
+
+                grid.appendChild(serverCard);
+            });
+        }
+
+        function renderAlerts(alerts) {
+            const container = document.getElementById('alertsContainer');
+            const countBadge = document.getElementById('alertsCount');
+            const resolveAllButton = document.getElementById('resolveAllButton');
+
+            if (alerts.length === 0) {
+                container.innerHTML = `
+                    <div class="no-alerts">
+                        All systems are running smoothly
+                    </div>
+                `;
+                countBadge.style.display = 'none';
+                resolveAllButton.classList.remove('show');
+                return;
+            }
+
+            countBadge.textContent = alerts.length;
+            countBadge.style.display = 'block';
+            resolveAllButton.classList.add('show');
+
+            container.innerHTML = alerts.map((alert, index) => `
+                <div class="alert-item" id="alert-${index}">
+                    <div class="alert-content">
+                        <div class="alert-info">
+                            <h4>${alert.process === "High CPU Usage" ? "🔥 High CPU Usage" : "⚠️ Process Down"}: ${alert.process}</h4>
+                            <p>${alert.server} (${alert.ip})</p>
+                        </div>
+                        <div class="alert-actions">
+                            <div class="alert-time">${alert.time}</div>
+                            ${alert.process !== "High CPU Usage" ? `
+    <button class="resolve-button" onclick="resolveAlert(${index})">
+        ✓ Resolve
+    </button>
+` : ''}
+
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function resolveAlert(alertIndex) {
+            const alertElement = document.getElementById(`alert-${alertIndex}`);
+            const resolveButton = alertElement.querySelector('.resolve-button');
+            
+            // Get the alert details before resolving
+            const alert = simulatedData.alerts[alertIndex];
+            
+            // Disable button and show resolving state
+            resolveButton.disabled = true;
+            resolveButton.textContent = '⏳ Resolving...';
+            alertElement.classList.add('resolving');
+            
+            // Simulate resolution delay
+            setTimeout(() => {
+                // Find the server and process, then update status to running
+                const server = simulatedData.servers.find(s => s.name === alert.server);
+                if (server) {
+                    const process = server.processes.find(p => p.name === alert.process);
+                    if (process) {
+                        process.status = 'running';
+                        // Mark as recently resolved for visual feedback
+                        const processKey = `${server.name}-${process.name}`;
+                        recentlyResolved.add(processKey);
+                    }
+                }
+                
+                // Remove from shown alerts set
+                const alertKey = `${alert.server}-${alert.process}`;
+                shownAlerts.delete(alertKey);
+                
+                // Remove the alert from the data
+                simulatedData.alerts.splice(alertIndex, 1);
+                
+                // Show success notification
+                showSuccessNotification(alert);
+                
+                // Add resolved animation
+                alertElement.classList.add('resolved');
+                
+                // Remove element after animation and re-render everything
+                setTimeout(() => {
+                    renderAlerts(simulatedData.alerts);
+                    renderServers(simulatedData); // Re-render servers to show updated process status
+                }, 500);
+                
+            }, 1000);
+        }
+
+        function resolveAllAlerts() {
+            const resolveAllButton = document.getElementById('resolveAllButton');
+            const alertCount = simulatedData.alerts.length;
+            
+            if (alertCount === 0) return;
+            
+            // Disable button and show resolving state
+            resolveAllButton.disabled = true;
+            resolveAllButton.textContent = `⏳ Resolving ${alertCount} alerts...`;
+            
+            // Add resolving class to all alert items
+            document.querySelectorAll('.alert-item').forEach(item => {
+                item.classList.add('resolving');
+                const button = item.querySelector('.resolve-button');
+                if (button) {
+                    button.disabled = true;
+                    button.textContent = '⏳ Resolving...';
+                }
+            });
+            
+            // Simulate resolution delay
+            setTimeout(() => {
+                // Store alerts for notification
+                const resolvedAlerts = [...simulatedData.alerts];
+                
+                // Resolve all processes
+                simulatedData.alerts.forEach(alert => {
+                    const server = simulatedData.servers.find(s => s.name === alert.server);
+                    if (server) {
+                        const process = server.processes.find(p => p.name === alert.process);
+                        if (process) {
+                            process.status = 'running';
+                            // Mark as recently resolved for visual feedback
+                            const processKey = `${server.name}-${process.name}`;
+                            recentlyResolved.add(processKey);
+                        }
+                    }
+                    
+                    // Remove from shown alerts set
+                    const alertKey = `${alert.server}-${alert.process}`;
+                    shownAlerts.delete(alertKey);
+                });
+                
+                // Clear all alerts
+                simulatedData.alerts = [];
+                
+                // Show bulk success notification
+                showBulkSuccessNotification(resolvedAlerts.length);
+                
+                // Add resolved animation to all alerts
+                document.querySelectorAll('.alert-item').forEach(item => {
+                    item.classList.add('resolved');
+                });
+                
+                // Re-render everything after animation
+                setTimeout(() => {
+                    renderAlerts(simulatedData.alerts);
+                    renderServers(simulatedData);
+                    
+                    // Reset button
+                    resolveAllButton.disabled = false;
+                    resolveAllButton.textContent = '✓ Resolve All';
+                }, 500);
+                
+            }, 1500);
+        }
+
+        function showNotification(alert, alertIndex) {
+            const notification = document.createElement('div');
+            notification.className = 'notification';
+            notification.innerHTML = `
+                <div class="notification-header">
+                    <div class="notification-title">🚨 Alert: Process Down</div>
+                    <button class="notification-close" onclick="this.parentElement.parentElement.remove()">×</button>
+                </div>
+                <div class="notification-body">
+                    <strong>${alert.process}</strong> on ${alert.server}<br>
+                    <small>${alert.ip} at ${alert.time}</small>
+                    <div style="margin-top: 10px;">
+                        <button class="resolve-button" style="font-size: 0.8rem; padding: 6px 12px;" 
+                                onclick="resolveAlert(${alertIndex}); this.parentElement.parentElement.parentElement.remove();">
+                            ✓ Quick Resolve
+                        </button>
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(notification);
+            
+            // Show notification
+            setTimeout(() => notification.classList.add('show'), 100);
+            
+            // Auto-remove after 8 seconds
+            setTimeout(() => {
+                if (notification.parentElement) {
+                    notification.remove();
+                }
+            }, 8000);
+        }
+
+        function showSuccessNotification(alert) {
+            const notification = document.createElement('div');
+            notification.className = 'notification success-notification';
+            notification.innerHTML = `
+                <div class="notification-header">
+                    <div class="notification-title">✅ Alert Resolved</div>
+                    <button class="notification-close" onclick="this.parentElement.parentElement.remove()">×</button>
+                </div>
+                <div class="notification-body">
+                    <strong>${alert.process}</strong> on ${alert.server} is now running<br>
+                    <small>Process successfully restored</small>
+                </div>
+            `;
+
+            document.body.appendChild(notification);
+            
+            // Show notification
+            setTimeout(() => notification.classList.add('show'), 100);
+            
+            // Auto-remove after 4 seconds
+            setTimeout(() => {
+                if (notification.parentElement) {
+                    notification.remove();
+                }
+            }, 4000);
+        }
+
+        function showBulkSuccessNotification(count) {
+            const notification = document.createElement('div');
+            notification.className = 'notification info-notification';
+            notification.innerHTML = `
+                <div class="notification-header">
+                    <div class="notification-title">🎉 All Alerts Resolved</div>
+                    <button class="notification-close" onclick="this.parentElement.parentElement.remove()">×</button>
+                </div>
+                <div class="notification-body">
+                    Successfully resolved <strong>${count}</strong> alert${count > 1 ? 's' : ''}<br>
+                    <small>All processes are now running normally</small>
+                </div>
+            `;
+
+            document.body.appendChild(notification);
+            
+            // Show notification
+            setTimeout(() => notification.classList.add('show'), 100);
+            
+            // Auto-remove after 5 seconds
+            setTimeout(() => {
+                if (notification.parentElement) {
+                    notification.remove();
+                }
+            }, 5000);
+        }
+
+        function simulateDataChanges() {
+    const newAlerts = []; // Declare at the top before using
+
+    simulatedData.servers.forEach(server => {
+        // Update all metrics with realistic variations
+        server.metrics.cpu = Math.max(5, Math.min(95, server.metrics.cpu + (Math.random() - 0.5) * 10));
+        server.metrics.memory = Math.max(10, Math.min(95, server.metrics.memory + (Math.random() - 0.5) * 8));
+        server.metrics.disk = Math.max(5, Math.min(90, server.metrics.disk + (Math.random() - 0.5) * 3));
+
+        // Update network
+        server.metrics.network.in = Math.max(0.1, server.metrics.network.in + (Math.random() - 0.5) * 0.5);
+        server.metrics.network.out = Math.max(0.1, server.metrics.network.out + (Math.random() - 0.5) * 0.3);
+
+        // Round values
+        server.metrics.cpu = Math.round(server.metrics.cpu);
+        server.metrics.memory = Math.round(server.metrics.memory);
+        server.metrics.disk = Math.round(server.metrics.disk);
+        server.metrics.network.in = Math.round(server.metrics.network.in * 10) / 10;
+        server.metrics.network.out = Math.round(server.metrics.network.out * 10) / 10;
+
+        // Check for high CPU usage
+        if (server.metrics.cpu > 75) {
+            const alertKey = `${server.name}-high-cpu`;
+            const alert = {
+                server: server.name,
+                process: "High CPU Usage",
+                ip: server.ip,
+                time: new Date().toLocaleTimeString()
+            };
+
+            if (!shownAlerts.has(alertKey)) {
+                shownAlerts.add(alertKey);
+                newAlerts.push(alert);
+                showNotification(alert, newAlerts.length - 1);
+            }
+        }
+
+        // Update process statuses
+        server.processes.forEach(process => {
+            const hasActiveAlert = simulatedData.alerts.some(alert =>
+                alert.server === server.name && alert.process === process.name
+            );
+            const processKey = `${server.name}-${process.name}`;
+            const wasRecentlyResolved = recentlyResolved.has(processKey);
+
+            if (!hasActiveAlert && !wasRecentlyResolved) {
+                if (Math.random() < 0.12) {
+                    process.status = 'down';
+                } else if (Math.random() < 0.03) {
+                    process.status = 'warning';
+                } else {
+                    process.status = 'running';
+                }
+            }
+
+            // Create process down alert
+            if (process.status === 'down') {
+                const alertKey = `${server.name}-${process.name}`;
+                const alert = {
+                    server: server.name,
+                    process: process.name,
+                    ip: server.ip,
+                    time: new Date().toLocaleTimeString()
+                };
+
+                if (!shownAlerts.has(alertKey)) {
+                    shownAlerts.add(alertKey);
+                    newAlerts.push(alert);
+                    showNotification(alert, newAlerts.length - 1);
+                }
+            }
+        });
+    });
+
+ // Clean up resolved alerts from shownAlerts
+const currentAlertKeys = new Set(newAlerts.map(a => `${a.server}-${a.process}`));
+shownAlerts.forEach(key => {
+    if (!currentAlertKeys.has(key)) {
+        shownAlerts.delete(key);
+    }
+});
+
+// Merge: keep old alerts if the process is still down
+const updatedAlerts = [
+    ...simulatedData.alerts.filter(oldAlert => {
+        const matchingServer = simulatedData.servers.find(s => s.name === oldAlert.server);
+        const matchingProcess = matchingServer?.processes.find(p => p.name === oldAlert.process);
+        return matchingProcess?.status === 'down'; // only keep if still down
+    }),
+    ...newAlerts.filter(a =>
+        !simulatedData.alerts.some(existing =>
+            existing.server === a.server && existing.process === a.process
+        )
+    )
+];
+
+simulatedData.alerts = updatedAlerts;
+
+
+}
+
+
+        function updateDashboard() {
+            simulateDataChanges();
+            renderServers(simulatedData);
+            renderAlerts(simulatedData.alerts);
+            updateCpuChart();
+            updateLastUpdated();
+            updateChartAppearance();
+        }
+document.getElementById('metricSelect').addEventListener('change', (e) => {
+    selectedMetric = e.target.value;
+    updateCpuChart();        
+    updateChartAppearance(); 
+});
+
+
+        // Initial load
+        initCpuChart();
+        updateDashboard();
+
+        // Update every 30 seconds
+        setInterval(updateDashboard, 30000);
+    </script>
+</body>
+</html>
